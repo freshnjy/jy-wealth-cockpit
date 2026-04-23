@@ -177,9 +177,7 @@ body::after{content:'';position:fixed;inset:0;background-image:linear-gradient(r
     <span class="status-text" id="status-text">구글 시트 ID를 입력하고 LOAD를 누르세요</span>
     <span class="status-updated" id="status-updated"></span>
     <div class="sheet-config">
-      <input class="sheet-input" id="sheet-id-input" placeholder="구글 시트 ID 입력">
-      <button class="btn btn-amber" onclick="loadPortfolio()">LOAD</button>
-      <button class="btn btn-ghost" onclick="clearCache()">↺ 새로고침</button>
+      <button class="btn btn-amber" onclick="loadPortfolio()">↺ 새로고침</button>
       <button class="btn btn-ghost" onclick="exportCSV()">↓ CSV</button>
     </div>
   </div>
@@ -298,8 +296,7 @@ const PALETTE  = ['#f0a500','#ffd060','#c47a00','#e8c040','#b85e00','#ffe090','#
 let portfolioData=null, currentAccount=null, currentMainTab='home', currentSubView='overview';
 let donutChart=null, homeAcctChart=null, homeStockChart=null, autoTimer=null;
 
-const savedId = localStorage.getItem('jy-sheet-id')||'';
-if(savedId) document.getElementById('sheet-id-input').value=savedId;
+
 
 /* CLOCK */
 function tickClock(){
@@ -325,12 +322,9 @@ function setStatus(s,msg,upd=''){
 
 /* API LOAD */
 async function loadPortfolio(){
-  const id=document.getElementById('sheet-id-input').value.trim();
-  if(!id){toast('구글 시트 ID를 입력하세요');return;}
-  localStorage.setItem('jy-sheet-id',id);
   setStatus('loading','📡 실시간 주가 조회 중...');
   try{
-    const res=await fetch(`${API_BASE}/api/portfolio?sheet_id=${encodeURIComponent(id)}`);
+    const res=await fetch(`${API_BASE}/api/portfolio`);
     if(!res.ok){const e=await res.json();throw new Error(e.detail||`HTTP ${res.status}`);}
     portfolioData=await res.json();
     const accts=Object.keys(portfolioData.accounts);
@@ -609,7 +603,7 @@ function renderAll(){
   if(currentMainTab==='mdd-view') renderMDDAll();
 }
 
-if(savedId) loadPortfolio();
+loadPortfolio();
 </script>
 </body>
 </html>

@@ -15,6 +15,9 @@ import requests, re, time, threading
 from datetime import datetime, timedelta, timezone
 import pandas as pd
 
+# 🔒 구글 시트 ID 고정
+SHEET_ID = "1YubXMkoyA3Fa63Juf98rmicN6XEbUE9QGw2sQHF30Vo"
+
 # ── 앱 초기화 ──────────────────────────────────────────
 app = FastAPI(title="JY Wealth Cockpit API", version="2.0")
 
@@ -209,12 +212,9 @@ class SheetRequest(BaseModel):
     sheet_id: str
 
 @app.get("/api/portfolio")
-def api_portfolio(sheet_id: str):
-    """
-    구글 시트에서 포트폴리오 로드 + 실시간 주가 결합
-    GET /api/portfolio?sheet_id=1YubXMkoyA3Fa63Juf98rmicN6XEbUE9QGw2sQHF30Vo
-    """
-    sheet_data = load_sheet(sheet_id)
+def api_portfolio():
+    """포트폴리오 로드 + 실시간 주가 결합 (시트ID 고정)"""
+    sheet_data = load_sheet(SHEET_ID)
     accounts   = sheet_data["accounts"]
 
     result = {}
