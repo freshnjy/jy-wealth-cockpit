@@ -851,8 +851,10 @@ function renderOverview(){
     }
   }).join('')||emptyRow(isUS?9:10);
 
-  // 모바일 카드 렌더링
-  renderMobileCards(h, isUS);
+  // 모바일 카드 렌더링 (모바일에서만)
+  const cardWrapOld = document.querySelector('#view-overview .mobile-cards');
+  if (cardWrapOld) cardWrapOld.remove();
+  if (isMobile()) renderMobileCards(h, isUS);
 }
 
 function renderMobileCards(h, isUS) {
