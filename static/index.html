@@ -444,6 +444,10 @@ function renderHome(){
     const upCnt=h.filter(x=>x.change_rate>0).length;
     const dnCnt=h.filter(x=>x.change_rate<0).length;
     const dc=dayChg>=0?'up':'dn';
+    const hasAvg=h.some(x=>x.has_avg);
+    const totalCost=h.reduce((s,x)=>s+x.cost,0);
+    const totalPnl=h.reduce((s,x)=>s+x.pnl,0);
+    const totalRet=totalCost>0?(totalPnl/totalCost)*100:0;
     return `<div class="acct-card" onclick="goToDetail('${name}')">
       <div class="acct-card-name">${name}</div>
       <div class="acct-card-total-label">총 평가금액</div>
@@ -452,7 +456,7 @@ function renderHome(){
         <div class="acct-meta-item"><div class="acct-meta-label">편입종목</div><div class="acct-meta-value">${h.length}개</div></div>
         <div class="acct-meta-item"><div class="acct-meta-label">당일변동</div><div class="acct-meta-value ${dc}">${sign(Math.round(dayChg))}</div></div>
         <div class="acct-meta-item"><div class="acct-meta-label">당일등락</div><div class="acct-meta-value ${dc}">${pct(dayPct)}</div></div>
-        <div class="acct-meta-item"><div class="acct-meta-label">상승/하락</div><div class="acct-meta-value">▲${upCnt} ▼${dnCnt}</div></div>
+        <div class="acct-meta-item"><div class="acct-meta-label">수익률</div><div class="acct-meta-value ${totalRet>=0?'up':'dn'}">${hasAvg?(totalRet>=0?'+':'')+totalRet.toFixed(1)+'%':'—'}</div></div>
         <div class="acct-meta-item"><div class="acct-meta-label">🚨액션</div><div class="acct-meta-value ${actionCnt>0?'warn':''}">${actionCnt}종목</div></div>
         <div class="acct-meta-item"><div class="acct-meta-label">MDD경고</div><div class="acct-meta-value ${mddAlert>0?'dn':''}">${mddAlert}종목</div></div>
       </div>
@@ -512,7 +516,13 @@ function switchAccount(name){currentAccount=name;renderDetail();}
 
 function setSubView(v){
   currentSubView=v;
-  document.querySelectorAll('.sub-btn').forEach((b,i)=>b.classList.toggle('on',['overview','rebalance'][i]===v));
+  const isUS=portfolioData?.accounts[currentAccount]?.is_us_acct||false;
+  // 미국 계좌면 리밸런싱 탭 숨김
+  document.querySelectorAll('.sub-btn').forEach((b,i)=>{
+    if(i===1) b.style.display=isUS?'none':'';
+    b.classList.toggle('on',['overview','rebalance'][i]===v);
+  });
+  if(isUS && v==='rebalance') v='overview';
   ['overview','rebalance'].forEach(n=>document.getElementById(`view-${n}`)?.classList.toggle('active',n===v));
   if(!portfolioData) return;
   if(v==='overview')  renderOverview();
@@ -520,23 +530,56 @@ function setSubView(v){
 }
 
 function renderOverview(){
-  const h=portfolioData.accounts[currentAccount]?.holdings||[];
+  const acct=portfolioData.accounts[currentAccount];
+  const h=acct?.holdings||[];
+  const isUS=acct?.is_us_acct||false;
+
+  // 테이블 헤더 동적 변경
+  const thead=document.querySelector('#view-overview table thead tr');
+  if(thead){
+    thead.innerHTML=isUS
+      ? '<th>종목</th><th>현재가(USD)</th><th>전일대비</th><th>등락률</th><th>보유수량</th><th>평가금액(USD)</th><th>평가금액(원)</th><th>수익률</th><th>MDD</th>'
+      : '<th>종목</th><th>현재가</th><th>전일대비</th><th>등락률</th><th>보유수량</th><th>평가금액</th><th>당일평가변동</th><th>수익률</th><th>비중</th><th>상태</th>';
+  }
+
   document.getElementById('tbl-overview').innerHTML=h.map(r=>{
-    const dayAmt=r.change_amt*r.qty;
-    const cc=r.change_amt>0?'var(--green)':r.change_amt<0?'var(--red)':'var(--text2)';
-    const ci=r.change_amt>0?'▲':r.change_amt<0?'▼':'—';
-    return `<tr>
-      <td><div class="sname">${r.name}</div><div class="scode">${r.ticker}</div></td>
-      <td>${won(r.cur_price)}</td>
-      <td style="color:${cc}">${ci} ${won(Math.abs(r.change_amt))}</td>
-      <td style="color:${cc};font-weight:700">${r.change_rate>0?'+':''}${r.change_rate}%</td>
-      <td>${r.qty.toLocaleString()}</td>
-      <td>${won(r.value)}</td>
-      <td style="color:${dayAmt>=0?'var(--green)':'var(--red)'}">${sign(Math.round(dayAmt))}</td>
-      <td>${r.cur_pct.toFixed(1)}%</td>
-      <td><span class="badge ${r.is_action?'badge-action':'badge-ok'}">${r.is_action?'🚨 ACTION':'✅ HOLD'}</span></td>
-    </tr>`;
-  }).join('')||emptyRow(9);
+    const cc=r.change_rate>0?'var(--green)':r.change_rate<0?'var(--red)':'var(--text2)';
+    const ci=r.change_rate>0?'▲':r.change_rate<0?'▼':'—';
+
+    if(isUS){
+      // 미국 계좌: USD 기준 표시
+      const mddColor=r.mdd<=-20?'var(--red)':r.mdd<=-10?'var(--yellow)':'var(--green)';
+      const retColor=r.ret_pct>=0?'var(--green)':'var(--red)';
+      const valueUsd=r.cur_price_usd?`$${(r.cur_price_usd*r.qty).toFixed(0)}`:'—';
+      return `<tr>
+        <td><div class="sname">${r.name}</div><div class="scode">${r.ticker}</div></td>
+        <td style="font-weight:700">$${r.cur_price_usd||'—'}</td>
+        <td style="color:${cc}">${ci} $${Math.abs(r.change_amt_usd||0).toFixed(2)}</td>
+        <td style="color:${cc};font-weight:700">${r.change_rate>0?'+':''}${r.change_rate}%</td>
+        <td>${r.qty}</td>
+        <td>${valueUsd}</td>
+        <td>${won(r.value)}</td>
+        <td style="color:${retColor};font-weight:700">${r.has_avg?(r.ret_pct>0?'+':'')+r.ret_pct.toFixed(2)+'%':'—'}</td>
+        <td style="color:${mddColor};font-weight:700">${r.high52w_usd>0?(r.mdd>=0?'+':'')+r.mdd.toFixed(1)+'%':'—'}</td>
+      </tr>`;
+    } else {
+      // 한국 계좌
+      const dayAmt=r.change_amt*r.qty;
+      const retColor=r.ret_pct>=0?'var(--green)':'var(--red)';
+      return `<tr>
+        <td><div class="sname">${r.name}</div><div class="scode">${r.ticker}</div></td>
+        <td>${won(r.cur_price)}</td>
+        <td style="color:${cc}">${ci} ${won(Math.abs(r.change_amt))}</td>
+        <td style="color:${cc};font-weight:700">${r.change_rate>0?'+':''}${r.change_rate}%</td>
+        <td>${r.qty.toLocaleString()}</td>
+        <td>${won(r.value)}</td>
+        <td style="color:${dayAmt>=0?'var(--green)':'var(--red)'}">${sign(Math.round(dayAmt))}</td>
+        <td style="color:${retColor};font-weight:700">${r.has_avg?(r.ret_pct>0?'+':'')+r.ret_pct.toFixed(2)+'%':'—'}</td>
+        <td>${r.cur_pct.toFixed(1)}%</td>
+        <td><span class="badge ${r.is_action?'badge-action':'badge-ok'}">${r.is_action?'🚨 ACTION':'✅ HOLD'}</span></td>
+      </tr>`;
+    }
+  }).join('')||emptyRow(isUS?9:10);
 }
 
 function renderRebalance(){
