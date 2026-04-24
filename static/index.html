@@ -164,6 +164,197 @@ body::after{content:'';position:fixed;inset:0;background-image:linear-gradient(r
 .mdd-pct.a{color:var(--red)}.mdd-pct.s{color:var(--green)}
 /* TOAST */
 .toast{position:fixed;bottom:20px;right:20px;background:var(--accent);color:var(--ink);font-family:var(--mono);font-size:13px;letter-spacing:1px;padding:9px 18px;z-index:9998;display:none;animation:fadeUp .2s ease}
+
+/* ═══════════════════════════
+   모바일 카드형 레이아웃
+   (세로 480px 이하에서 활성화)
+═══════════════════════════ */
+@media (max-width: 480px) {
+
+  /* 테이블 숨김 */
+  .htable { display: none !important; }
+
+  /* 카드 컨테이너 */
+  .mobile-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .m-card {
+    background: var(--surface);
+    border: 1px solid var(--rim);
+    border-radius: 4px;
+    padding: 14px;
+    position: relative;
+  }
+
+  .m-card.action-alert {
+    border-left: 3px solid var(--red);
+  }
+
+  .m-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+
+  .m-stock-name {
+    font-family: var(--body);
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text);
+  }
+
+  .m-stock-code {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text2);
+    margin-top: 2px;
+  }
+
+  .m-price-wrap {
+    text-align: right;
+  }
+
+  .m-price {
+    font-family: var(--display);
+    font-size: 20px;
+    letter-spacing: 1px;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .m-change {
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-top: 3px;
+    text-align: right;
+  }
+
+  .m-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 10px 0;
+    border-top: 1px solid var(--rim);
+    border-bottom: 1px solid var(--rim);
+  }
+
+  .m-grid-item {
+    text-align: center;
+  }
+
+  .m-grid-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text2);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+
+  .m-grid-value {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .m-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .m-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .m-trade-btns {
+    display: flex;
+    gap: 6px;
+  }
+
+  .m-trade-btn {
+    padding: 6px 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    border: 1px solid;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .m-trade-btn.buy {
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  .m-trade-btn.sell {
+    border-color: var(--red);
+    color: var(--red);
+  }
+
+  /* 사이드바 숨김 (모바일) */
+  .main-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sidebar {
+    display: none !important;
+  }
+
+  /* 서브탭 크게 */
+  .sub-btn {
+    padding: 10px 20px !important;
+    font-size: 12px !important;
+    flex: 1;
+    text-align: center;
+  }
+
+  /* 계좌탭 스크롤 */
+  .acct-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .acct-tab {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* KPI 2열 */
+  .grand-bar {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .kpi-grand {
+    grid-column: 1 / -1;
+  }
+
+  /* 홈 차트 1열 */
+  .home-charts {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* 계좌카드 풀폭 */
+  .acct-summary-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* nav 탭 균등 */
+  .nav-tab {
+    padding: 10px 8px !important;
+    font-size: 11px !important;
+  }
+}
 .hud-footer{font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--text3);text-align:center;padding:8px}
 @media(max-width:900px){
   .grand-bar{grid-template-columns:1fr 1fr}.kpi-grand{grid-column:1/-1}
@@ -596,6 +787,10 @@ function setSubView(v){
   if(v==='rebalance') renderRebalance();
 }
 
+function isMobile() {
+  return window.innerWidth <= 480;
+}
+
 function renderOverview(){
   const acct=portfolioData.accounts[currentAccount];
   const h=acct?.holdings||[];
@@ -655,6 +850,127 @@ function renderOverview(){
       </tr>`;
     }
   }).join('')||emptyRow(isUS?9:10);
+
+  // 모바일 카드 렌더링
+  renderMobileCards(h, isUS);
+}
+
+function renderMobileCards(h, isUS) {
+  // 기존 카드 컨테이너 제거 후 재생성
+  const pane = document.getElementById('view-overview');
+  let cardWrap = pane.querySelector('.mobile-cards');
+  if (cardWrap) cardWrap.remove();
+
+  cardWrap = document.createElement('div');
+  cardWrap.className = 'mobile-cards';
+
+  h.forEach(r => {
+    const cc = r.change_rate > 0 ? 'var(--green)' : r.change_rate < 0 ? 'var(--red)' : 'var(--text2)';
+    const ci = r.change_rate > 0 ? '▲' : r.change_rate < 0 ? '▼' : '—';
+    const retColor = r.ret_pct >= 0 ? 'var(--green)' : 'var(--red)';
+    const dayAmt = r.change_amt * r.qty;
+
+    const card = document.createElement('div');
+    card.className = 'm-card' + (r.is_action ? ' action-alert' : '');
+
+    if (isUS) {
+      // 미국 계좌 카드
+      const mddColor = r.mdd <= -20 ? 'var(--red)' : r.mdd <= -10 ? 'var(--yellow)' : 'var(--green)';
+      card.innerHTML = `
+        <div class="m-card-header">
+          <div>
+            <div class="m-stock-name">${r.name}</div>
+            <div class="m-stock-code">${r.ticker} · USD</div>
+          </div>
+          <div class="m-price-wrap">
+            <div class="m-price">$${r.cur_price_usd || '—'}</div>
+            <div class="m-change" style="color:${cc}">${ci} $${Math.abs(r.change_amt_usd || 0).toFixed(2)} (${r.change_rate > 0 ? '+' : ''}${r.change_rate}%)</div>
+          </div>
+        </div>
+        <div class="m-grid">
+          <div class="m-grid-item">
+            <div class="m-grid-label">보유수량</div>
+            <div class="m-grid-value">${r.qty}주</div>
+          </div>
+          <div class="m-grid-item">
+            <div class="m-grid-label">평가금액</div>
+            <div class="m-grid-value">${won(r.value)}</div>
+          </div>
+          <div class="m-grid-item">
+            <div class="m-grid-label">수익률</div>
+            <div class="m-grid-value" style="color:${retColor}">${r.has_avg ? (r.ret_pct > 0 ? '+' : '') + r.ret_pct.toFixed(1) + '%' : '—'}</div>
+          </div>
+          <div class="m-grid-item">
+            <div class="m-grid-label">MDD</div>
+            <div class="m-grid-value" style="color:${mddColor}">${r.high52w_usd > 0 ? (r.mdd >= 0 ? '+' : '') + r.mdd.toFixed(1) + '%' : '—'}</div>
+          </div>
+          <div class="m-grid-item">
+            <div class="m-grid-label">52주고가</div>
+            <div class="m-grid-value">$${r.high52w_usd || '—'}</div>
+          </div>
+          <div class="m-grid-item">
+            <div class="m-grid-label">환율</div>
+            <div class="m-grid-value">${r.usd_krw ? Math.round(r.usd_krw).toLocaleString() : '—'}</div>
+          </div>
+        </div>
+        <div class="m-footer">
+          <div class="m-badges"></div>
+          <div class="m-trade-btns"></div>
+        </div>`;
+    } else {
+      // 한국 계좌 카드
+      card.innerHTML = `
+        <div class="m-card-header">
+          <div>
+            <div class="m-stock-name">${r.name}</div>
+            <div class="m-stock-code">${r.ticker}</div>
+          </div>
+          <div class="m-price-wrap">
+            <div class="m-price">${won(r.cur_price)}</div>
+            <div class="m-change" style="color:${cc}">${ci} ${won(Math.abs(r.change_amt))} (${r.change_rate > 0 ? '+' : ''}${r.change_rate}%)</div>
+          </div>
+        </div>
+        <div class="m-grid">
+          <div class="m-grid-item">
+            <div class="m-grid-label">보유수량</div>
+            <div class="m-grid-value">${r.qty}주</div>
+          </div>
+          <div class="m-grid-item">
+            <div class="m-grid-label">평가금액</div>
+            <div class="m-grid-value">${won(r.value)}</div>
+          </div>
+          <div class="m-grid-item">
+            <div class="m-grid-label">수익률</div>
+            <div class="m-grid-value" style="color:${retColor}">${r.has_avg ? (r.ret_pct > 0 ? '+' : '') + r.ret_pct.toFixed(1) + '%' : '—'}</div>
+          </div>
+          <div class="m-grid-item">
+            <div class="m-grid-label">당일변동</div>
+            <div class="m-grid-value" style="color:${dayAmt >= 0 ? 'var(--green)' : 'var(--red)'}">${sign(Math.round(dayAmt))}</div>
+          </div>
+          <div class="m-grid-item">
+            <div class="m-grid-label">비중</div>
+            <div class="m-grid-value">${r.cur_pct.toFixed(1)}%</div>
+          </div>
+          <div class="m-grid-item">
+            <div class="m-grid-label">목표비중</div>
+            <div class="m-grid-value" style="color:var(--accent)">${r.target_pct.toFixed(1)}%</div>
+          </div>
+        </div>
+        <div class="m-footer">
+          <div class="m-badges">
+            <span class="badge ${r.is_action ? 'badge-action' : 'badge-ok'}">${r.is_action ? '🚨 ACTION' : '✅ HOLD'}</span>
+          </div>
+          <div class="m-trade-btns">
+            <button class="m-trade-btn buy" onclick="openTrade('${currentAccount}','${r.ticker}','${r.name}',${r.cur_price},${r.qty},${r.avg_price},'buy')">▲매수</button>
+            <button class="m-trade-btn sell" onclick="openTrade('${currentAccount}','${r.ticker}','${r.name}',${r.cur_price},${r.qty},${r.avg_price},'sell')">▼매도</button>
+          </div>
+        </div>`;
+    }
+
+    cardWrap.appendChild(card);
+  });
+
+  pane.appendChild(cardWrap);
 }
 
 function renderRebalance(){
