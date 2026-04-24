@@ -89,26 +89,37 @@ def fetch_stock_info(ticker: str) -> dict:
         except Exception:
             pass
 
-    # 52주 최고가: 네이버 종목 메인 페이지 파싱
+    result = {
+        "ticker":      clean,
+        "price":       price,
+        "change_amt":  change_amt,
+        "change_rate": round(change_rate, 2),
+        "high52w":     0,  # 별도 API로 조회
+        "updated_at":  datetime.now(timezone(timedelta(hours=9))).strftime("%H:%M:%S"),
+    }
+    set_cache(f"stock_{ticker}", result)
+    return result
+
+
+def fetch_high52w(ticker: str) -> int:
+    """52주 최고가 별도 조회 (느림 — 백그라운드용)"""
+    cached = get_cache(f"high52_{ticker}")
+    if cached:
+        return cached["value"]
+
+    clean = str(ticker).strip().upper().zfill(6)
+    high52w = 0
     try:
         url = f"https://finance.naver.com/item/main.naver?code={clean}"
-        res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+        res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
         match = re.search(r"52주최고.*?<em>([\d,]+)</em>", res.text, re.DOTALL)
         if match:
             high52w = int(match.group(1).replace(",", ""))
     except Exception:
         pass
 
-    result = {
-        "ticker":      clean,
-        "price":       price,
-        "change_amt":  change_amt,
-        "change_rate": round(change_rate, 2),
-        "high52w":     high52w,
-        "updated_at":  datetime.now(timezone(timedelta(hours=9))).strftime("%H:%M:%S"),
-    }
-    set_cache(f"stock_{ticker}", result)
-    return result
+    set_cache(f"high52_{ticker}", {"value": high52w})
+    return high52w
 
 
 # ══════════════════════════════════════════════════════
@@ -308,6 +319,42 @@ def clear_cache():
     """캐시 초기화 (강제 새로고침)"""
     _cache.clear()
     return {"message": "캐시가 초기화되었습니다."}
+
+
+
+@app.get("/api/high52")
+def api_high52():
+    """
+    전체 종목 52주 최고가 일괄 조회 (백그라운드용 — 느림)
+    GET /api/high52
+    """
+    sheet_data = load_sheet(SHEET_ID)
+    accounts   = sheet_data["accounts"]
+
+    result = {}
+    lock = threading.Lock()
+
+    def fetch_one(ticker):
+        val = fetch_high52w(ticker)
+        with lock:
+            result[ticker] = val
+
+    threads = []
+    for holdings in accounts.values():
+        for h in holdings:
+            t = h["ticker"]
+            if t not in result:
+                th = threading.Thread(target=fetch_one, args=(t,))
+                threads.append(th)
+                th.start()
+
+    for th in threads:
+        th.join(timeout=15)
+
+    return {
+        "high52w":    result,
+        "updated_at": datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d %H:%M:%S"),
+    }
 
 
 @app.get("/api/health")

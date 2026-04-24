@@ -322,17 +322,45 @@ function setStatus(s,msg,upd=''){
 
 /* API LOAD */
 async function loadPortfolio(){
-  setStatus('loading','📡 실시간 주가 조회 중...');
+  setStatus('loading','📡 1단계: 실시간 주가 조회 중...');
   try{
+    // ① 주가 먼저 빠르게 로드
     const res=await fetch(`${API_BASE}/api/portfolio`);
     if(!res.ok){const e=await res.json();throw new Error(e.detail||`HTTP ${res.status}`);}
     portfolioData=await res.json();
     const accts=Object.keys(portfolioData.accounts);
     if(!accts.length) throw new Error('계좌 데이터를 찾을 수 없습니다');
     if(!currentAccount||!portfolioData.accounts[currentAccount]) currentAccount=accts[0];
-    setStatus('live','✅ 실시간 연결 완료 · 10분 자동 갱신',`Updated: ${portfolioData.updated_at}`);
-    renderAll(); resetTimer(); toast('데이터 로드 완료');
+    setStatus('live','✅ 주가 로드 완료 · 52주 최고가 조회 중...',`Updated: ${portfolioData.updated_at}`);
+    renderAll(); resetTimer();
+
+    // ② 52주 최고가 백그라운드에서 조회 후 MDD 업데이트
+    loadHigh52w();
+
   }catch(e){setStatus('error',`❌ ${e.message}`);toast('로드 실패: '+e.message);}
+}
+
+async function loadHigh52w(){
+  try{
+    const res=await fetch(`${API_BASE}/api/high52`);
+    if(!res.ok) return;
+    const data=await res.json();
+
+    // 각 계좌 종목에 52주 최고가 및 MDD 반영
+    for(const[,acct] of Object.entries(portfolioData.accounts)){
+      acct.holdings.forEach(h=>{
+        const high=data.high52w[h.ticker]||0;
+        h.high52w=high;
+        h.mdd=high>0&&h.cur_price>0 ? (h.cur_price-high)/high*100 : 0;
+      });
+    }
+    setStatus('live','✅ 실시간 연결 완료 · 10분 자동 갱신',`Updated: ${data.updated_at}`);
+    // MDD 반영해서 화면 재렌더
+    renderAll();
+    toast('52주 최고가 업데이트 완료');
+  }catch(e){
+    setStatus('live','✅ 주가 로드 완료 (52주 최고가 조회 실패)','');
+  }
 }
 
 async function clearCache(){
