@@ -83,7 +83,23 @@ def set_cache(key, data):
 #  헬퍼: 한국/미국 티커 자동 감지
 # ══════════════════════════════════════════════════════
 def is_korean(ticker: str) -> bool:
-    return str(ticker).strip().replace("0","").isdigit() or str(ticker).strip().isdigit()
+    """
+    한국 종목코드 판별
+    - 순수 숫자 6자리: 069500, 005930 등
+    - 숫자+영문 혼합 6자리: 0131V0, 122630 등 (ETF 특수코드)
+    - 영문만: AAPL, TSLA 등 → 미국
+    """
+    t = str(ticker).strip()
+    # 영문자로만 이루어진 경우 → 미국
+    if t.isalpha():
+        return False
+    # 6자리이고 영문+숫자 혼합인 경우 → 한국 ETF 특수코드
+    if len(t) == 6 and not t.isdigit() and not t.isalpha():
+        return True
+    # 순수 숫자 → 한국
+    if t.isdigit():
+        return True
+    return False
 
 
 # ══════════════════════════════════════════════════════
