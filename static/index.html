@@ -309,6 +309,73 @@ body::after{content:'';position:fixed;inset:0;background-image:linear-gradient(r
 
   <div class="hud-footer">JY WEALTH COCKPIT v2.1 · FastAPI Backend · 구입단가 미포함 모드 · KST</div>
 </div>
+
+<!-- 매수/매도 모달 -->
+<div id="trade-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px)">
+  <div style="background:#202020;border:1px solid #2e2e2e;border-top:3px solid var(--accent);padding:28px;width:360px;max-width:90vw;animation:fadeUp .2s ease">
+    <div style="font-family:var(--display);font-size:22px;letter-spacing:3px;color:var(--accent);margin-bottom:6px" id="trade-modal-title">매수</div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--text2);margin-bottom:20px" id="trade-modal-sub">종목명</div>
+
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button id="trade-type-buy"  onclick="setTradeType('buy')"
+        style="flex:1;padding:10px;font-family:var(--mono);font-size:11px;letter-spacing:2px;border:1px solid var(--green);background:rgba(0,217,126,.15);color:var(--green);cursor:pointer">
+        ▲ 매수
+      </button>
+      <button id="trade-type-sell" onclick="setTradeType('sell')"
+        style="flex:1;padding:10px;font-family:var(--mono);font-size:11px;letter-spacing:2px;border:1px solid var(--rim);background:transparent;color:var(--text2);cursor:pointer">
+        ▼ 매도
+      </button>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text2);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">수량 (주)</div>
+      <input id="trade-qty" type="number" min="0" step="1" placeholder="0"
+        style="width:100%;background:#1a1a1a;border:1px solid #3d3d3d;color:white;font-family:var(--mono);font-size:16px;padding:10px 14px;outline:none"
+        oninput="calcTrade()">
+    </div>
+
+    <div style="margin-bottom:20px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text2);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">거래 단가</div>
+      <input id="trade-price" type="number" min="0" placeholder="0"
+        style="width:100%;background:#1a1a1a;border:1px solid #3d3d3d;color:white;font-family:var(--mono);font-size:16px;padding:10px 14px;outline:none"
+        oninput="calcTrade()">
+    </div>
+
+    <!-- 계산 결과 미리보기 -->
+    <div id="trade-preview" style="background:#1a1a1a;border:1px solid #2e2e2e;padding:14px;margin-bottom:20px;display:none">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text2);letter-spacing:1px;margin-bottom:8px">거래 후 예상</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text2)">보유수량</div>
+          <div style="font-family:var(--mono);font-size:14px;color:white" id="preview-qty">—</div>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text2)">평균단가</div>
+          <div style="font-family:var(--mono);font-size:14px;color:var(--accent)" id="preview-avg">—</div>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text2)">거래금액</div>
+          <div style="font-family:var(--mono);font-size:14px;color:white" id="preview-amount">—</div>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text2)">신규 평단</div>
+          <div style="font-family:var(--mono);font-size:14px;color:var(--accent)" id="preview-newavg">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button onclick="closeTrade()"
+        style="flex:1;padding:12px;font-family:var(--mono);font-size:11px;letter-spacing:2px;border:1px solid #2e2e2e;background:transparent;color:#888;cursor:pointer">
+        취소
+      </button>
+      <button id="trade-confirm-btn" onclick="confirmTrade()"
+        style="flex:2;padding:12px;font-family:var(--mono);font-size:11px;letter-spacing:2px;border:none;background:var(--accent);color:#111;font-weight:700;cursor:pointer">
+        확인
+      </button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -539,7 +606,7 @@ function renderOverview(){
   if(thead){
     thead.innerHTML=isUS
       ? '<th>종목</th><th>현재가(USD)</th><th>전일대비</th><th>등락률</th><th>보유수량</th><th>평가금액(USD)</th><th>평가금액(원)</th><th>수익률</th><th>MDD</th>'
-      : '<th>종목</th><th>현재가</th><th>전일대비</th><th>등락률</th><th>보유수량</th><th>평가금액</th><th>당일평가변동</th><th>수익률</th><th>비중</th><th>상태</th>';
+      : '<th>종목</th><th>현재가</th><th>전일대비</th><th>등락률</th><th>보유수량</th><th>평가금액</th><th>당일평가변동</th><th>수익률</th><th>비중</th><th>상태</th><th>매매</th>';
   }
 
   document.getElementById('tbl-overview').innerHTML=h.map(r=>{
@@ -577,6 +644,14 @@ function renderOverview(){
         <td style="color:${retColor};font-weight:700">${r.has_avg?(r.ret_pct>0?'+':'')+r.ret_pct.toFixed(2)+'%':'—'}</td>
         <td>${r.cur_pct.toFixed(1)}%</td>
         <td><span class="badge ${r.is_action?'badge-action':'badge-ok'}">${r.is_action?'🚨 ACTION':'✅ HOLD'}</span></td>
+        <td>
+          <div style="display:flex;gap:4px;justify-content:flex-end">
+            <button onclick="openTrade('${currentAccount}','${r.ticker}','${r.name}',${r.cur_price},${r.qty},${r.avg_price},'buy')"
+              style="padding:4px 10px;font-family:var(--mono);font-size:10px;border:1px solid var(--green);background:transparent;color:var(--green);cursor:pointer;letter-spacing:1px">▲매수</button>
+            <button onclick="openTrade('${currentAccount}','${r.ticker}','${r.name}',${r.cur_price},${r.qty},${r.avg_price},'sell')"
+              style="padding:4px 10px;font-family:var(--mono);font-size:10px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;letter-spacing:1px">▼매도</button>
+          </div>
+        </td>
       </tr>`;
     }
   }).join('')||emptyRow(isUS?9:10);
@@ -687,6 +762,120 @@ function exportCSV(){
 }
 
 function emptyRow(cols){return `<tr><td colspan="${cols}" style="text-align:center;padding:30px;color:var(--text3);font-family:var(--mono);font-size:10px">데이터 없음</td></tr>`;}
+
+/* ═══════════════════════════
+   매수/매도 모달
+═══════════════════════════ */
+let tradeState = {};
+
+function openTrade(acctName, ticker, name, curPrice, curQty, curAvg, type) {
+  tradeState = { acctName, ticker, name, curPrice, curQty, curAvg };
+  document.getElementById('trade-modal-title').textContent = name;
+  document.getElementById('trade-modal-sub').textContent = `${ticker} · 보유 ${curQty}주 · 현재가 ${curPrice.toLocaleString()}`;
+  document.getElementById('trade-qty').value   = '';
+  document.getElementById('trade-price').value = curPrice || '';
+  document.getElementById('trade-preview').style.display = 'none';
+  document.getElementById('trade-modal').style.display = 'flex';
+  setTradeType(type);
+}
+
+function setTradeType(type) {
+  tradeState.type = type;
+  const buyBtn  = document.getElementById('trade-type-buy');
+  const sellBtn = document.getElementById('trade-type-sell');
+  if (type === 'buy') {
+    buyBtn.style.background  = 'rgba(0,217,126,.15)';
+    buyBtn.style.borderColor = 'var(--green)';
+    buyBtn.style.color       = 'var(--green)';
+    sellBtn.style.background = 'transparent';
+    sellBtn.style.borderColor= 'var(--rim)';
+    sellBtn.style.color      = 'var(--text2)';
+    document.getElementById('trade-confirm-btn').style.background = 'var(--green)';
+  } else {
+    sellBtn.style.background  = 'rgba(255,77,109,.15)';
+    sellBtn.style.borderColor = 'var(--red)';
+    sellBtn.style.color       = 'var(--red)';
+    buyBtn.style.background   = 'transparent';
+    buyBtn.style.borderColor  = 'var(--rim)';
+    buyBtn.style.color        = 'var(--text2)';
+    document.getElementById('trade-confirm-btn').style.background = 'var(--red)';
+  }
+  calcTrade();
+}
+
+function calcTrade() {
+  const qty   = parseFloat(document.getElementById('trade-qty').value)   || 0;
+  const price = parseFloat(document.getElementById('trade-price').value) || 0;
+  const { curQty, curAvg, type } = tradeState;
+
+  if (!qty || !price) {
+    document.getElementById('trade-preview').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('trade-preview').style.display = 'block';
+
+  let newQty, newAvg;
+  if (type === 'buy') {
+    newQty = curQty + qty;
+    newAvg = curAvg > 0 ? (curAvg * curQty + price * qty) / newQty : price;
+  } else {
+    newQty = curQty - qty;
+    newAvg = curAvg;
+  }
+
+  document.getElementById('preview-qty').textContent    = newQty.toLocaleString() + '주';
+  document.getElementById('preview-avg').textContent    = curAvg > 0 ? curAvg.toLocaleString() : '—';
+  document.getElementById('preview-amount').textContent = (qty * price).toLocaleString() + '원';
+  document.getElementById('preview-newavg').textContent = newAvg > 0 ? Math.round(newAvg).toLocaleString() + '원' : '—';
+}
+
+function closeTrade() {
+  document.getElementById('trade-modal').style.display = 'none';
+}
+
+async function confirmTrade() {
+  const qty   = parseFloat(document.getElementById('trade-qty').value);
+  const price = parseFloat(document.getElementById('trade-price').value);
+  const { acctName, ticker, type } = tradeState;
+
+  if (!qty || qty <= 0) { toast('수량을 입력하세요'); return; }
+  if (!price || price <= 0) { toast('단가를 입력하세요'); return; }
+
+  const btn = document.getElementById('trade-confirm-btn');
+  btn.textContent = '처리 중...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/trade`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sheet_name: acctName,
+        ticker:     ticker,
+        trade_type: type,
+        qty:        qty,
+        price:      price,
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '오류 발생');
+
+    closeTrade();
+    toast(`✅ ${data.message}`);
+
+    // 데이터 새로고침
+    await loadPortfolio();
+
+  } catch(e) {
+    toast('❌ ' + e.message);
+  } finally {
+    btn.textContent = '확인';
+    btn.disabled = false;
+  }
+}
+
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',2500);}
 
 function renderAll(){

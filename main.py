@@ -12,7 +12,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import requests, re, time, threading
+import requests, re, time, threading, json, os
+import gspread
+from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta, timezone
 import pandas as pd
 
@@ -30,6 +32,44 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ── 캐시 ───────────────────────────────────────────────
 _cache: dict = {}
+
+# ── 구글 시트 쓰기 클라이언트 ────────────────────────
+_gs_client = None
+
+def get_gs_client():
+    global _gs_client
+    if _gs_client:
+        return _gs_client
+    try:
+        creds_json = os.environ.get("GOOGLE_CREDENTIALS", "")
+        if not creds_json:
+            raise ValueError("GOOGLE_CREDENTIALS 환경변수가 없습니다")
+        creds_dict = json.loads(creds_json)
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        _gs_client = gspread.authorize(creds)
+        return _gs_client
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"구글 인증 실패: {e}")
+
+
+def get_gs_sheet(sheet_id: str, sheet_name: str):
+    """특정 시트 탭 반환"""
+    gc = get_gs_client()
+    wb = gc.open_by_key(sheet_id)
+    try:
+        return wb.worksheet(sheet_name)
+    except gspread.WorksheetNotFound:
+        raise HTTPException(status_code=404, detail=f"시트 탭 '{sheet_name}'을 찾을 수 없습니다")
+
+
+def cache_key(key):
+    """key"""
+    return key
+
 
 def get_cache(key):
     e = _cache.get(key)
@@ -435,6 +475,140 @@ def api_usdkrw():
 def clear_cache():
     _cache.clear()
     return {"message": "캐시 초기화 완료"}
+
+
+# ── 매수/매도 요청 모델 ──────────────────────────────
+from pydantic import BaseModel
+
+class TradeRequest(BaseModel):
+    sheet_name: str        # 구글 시트 탭 이름 (= 계좌명)
+    ticker:     str        # 종목코드 또는 티커
+    trade_type: str        # "buy" 또는 "sell"
+    qty:        float      # 거래 수량
+    price:      float      # 거래 단가
+
+
+@app.post("/api/trade")
+def api_trade(req: TradeRequest):
+    """
+    매수/매도 처리 → 구글 시트 보유수량 & 매입단가 자동 업데이트
+    POST /api/trade
+    """
+    try:
+        ws = get_gs_sheet(SHEET_ID, req.sheet_name)
+        rows = ws.get_all_values()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"시트 읽기 실패: {e}")
+
+    # 헤더 행 찾기
+    header = None
+    header_row_idx = None
+    for i, row in enumerate(rows):
+        if "종목코드" in row:
+            header = row
+            header_row_idx = i
+            break
+
+    if header is None:
+        raise HTTPException(status_code=400, detail="종목코드 헤더를 찾을 수 없습니다")
+
+    # 컬럼 인덱스 매핑
+    def col_idx(name):
+        for alt in [name]:
+            if alt in header:
+                return header.index(alt)
+        return None
+
+    code_col = col_idx("종목코드")
+    qty_col  = col_idx("보유수량")
+
+    # 매입단가 컬럼
+    avg_col = None
+    for name in ["매입단가", "매입가", "평균단가", "취득단가"]:
+        if name in header:
+            avg_col = header.index(name)
+            break
+
+    if code_col is None or qty_col is None:
+        raise HTTPException(status_code=400, detail="종목코드 또는 보유수량 컬럼이 없습니다")
+
+    # 종목 행 찾기
+    target_row_idx = None
+    for i, row in enumerate(rows):
+        if i <= header_row_idx:
+            continue
+        cell_val = str(row[code_col]).strip() if len(row) > code_col else ""
+        # 한국: 앞 0 제거 후 비교 / 미국: 대문자 비교
+        if cell_val.lstrip("0") == req.ticker.lstrip("0") or cell_val.upper() == req.ticker.upper():
+            target_row_idx = i
+            break
+
+    if target_row_idx is None:
+        raise HTTPException(status_code=404, detail=f"종목 '{req.ticker}'을 시트에서 찾을 수 없습니다")
+
+    target_row = rows[target_row_idx]
+
+    # 현재 보유수량, 매입단가 읽기
+    try:
+        cur_qty = float(str(target_row[qty_col]).replace(",", "") or "0")
+    except Exception:
+        cur_qty = 0.0
+
+    cur_avg = 0.0
+    if avg_col is not None and len(target_row) > avg_col:
+        try:
+            cur_avg = float(str(target_row[avg_col]).replace(",", "") or "0")
+        except Exception:
+            cur_avg = 0.0
+
+    # 매수/매도 계산
+    if req.trade_type == "buy":
+        new_qty = cur_qty + req.qty
+        # 평균단가 재계산: (기존금액 + 신규금액) / 신규수량
+        if cur_avg > 0 and cur_qty > 0:
+            new_avg = round((cur_avg * cur_qty + req.price * req.qty) / new_qty, 2)
+        else:
+            new_avg = req.price
+
+    elif req.trade_type == "sell":
+        new_qty = cur_qty - req.qty
+        if new_qty < 0:
+            raise HTTPException(status_code=400, detail=f"매도 수량({req.qty})이 보유수량({cur_qty})을 초과합니다")
+        new_avg = cur_avg  # 매도 시 평균단가 유지
+
+    else:
+        raise HTTPException(status_code=400, detail="trade_type은 'buy' 또는 'sell'이어야 합니다")
+
+    # 구글 시트 업데이트 (1-indexed, +1 for header offset)
+    sheet_row = target_row_idx + 1  # gspread는 1부터 시작
+
+    try:
+        # 보유수량 업데이트
+        qty_cell = gspread.utils.rowcol_to_a1(sheet_row, qty_col + 1)
+        ws.update(qty_cell, [[new_qty]])
+
+        # 매입단가 업데이트 (컬럼이 있을 때만)
+        if avg_col is not None and req.trade_type == "buy":
+            avg_cell = gspread.utils.rowcol_to_a1(sheet_row, avg_col + 1)
+            ws.update(avg_cell, [[new_avg]])
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"시트 업데이트 실패: {e}")
+
+    # 캐시 초기화 (변경사항 즉시 반영)
+    _cache.clear()
+
+    return {
+        "success":   True,
+        "ticker":    req.ticker,
+        "trade":     req.trade_type,
+        "prev_qty":  cur_qty,
+        "new_qty":   new_qty,
+        "prev_avg":  cur_avg,
+        "new_avg":   new_avg if req.trade_type == "buy" else cur_avg,
+        "message":   f"{'매수' if req.trade_type == 'buy' else '매도'} 완료: {req.ticker} {req.qty}주"
+    }
+
 
 @app.get("/api/health")
 def health():
