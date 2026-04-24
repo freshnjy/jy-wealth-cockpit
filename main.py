@@ -15,7 +15,6 @@ from fastapi.responses import FileResponse
 import requests, re, time, threading
 from datetime import datetime, timedelta, timezone
 import pandas as pd
-import yfinance as yf
 
 # ── 설정 ───────────────────────────────────────────────
 SHEET_ID  = "1YubXMkoyA3Fa63Juf98rmicN6XEbUE9QGw2sQHF30Vo"
@@ -121,16 +120,59 @@ def fetch_kr_high52w(ticker: str) -> int:
 # ══════════════════════════════════════════════════════
 #  미국 주식 조회 (Yahoo Finance)
 # ══════════════════════════════════════════════════════
+# Yahoo Finance HTTP 헤더 (브라우저 위장)
+_YF_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+}
+
+def _yf_quote(ticker: str) -> dict:
+    """Yahoo Finance v8 API 직접 호출 (yfinance 라이브러리 없이)"""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=1d"
+    try:
+        res = requests.get(url, headers=_YF_HEADERS, timeout=8)
+        data = res.json()
+        meta = data["chart"]["result"][0]["meta"]
+        return {
+            "price":       meta.get("regularMarketPrice", 0),
+            "prev_close":  meta.get("chartPreviousClose", 0),
+            "year_high":   meta.get("fiftyTwoWeekHigh", 0),
+            "year_low":    meta.get("fiftyTwoWeekLow", 0),
+        }
+    except Exception:
+        pass
+
+    # 2차: v7 API 시도
+    try:
+        url2 = f"https://query2.finance.yahoo.com/v7/finance/quote?symbols={ticker}"
+        res2 = requests.get(url2, headers=_YF_HEADERS, timeout=8)
+        q = res2.json()["quoteResponse"]["result"][0]
+        return {
+            "price":      q.get("regularMarketPrice", 0),
+            "prev_close": q.get("regularMarketPreviousClose", 0),
+            "year_high":  q.get("fiftyTwoWeekHigh", 0),
+            "year_low":   q.get("fiftyTwoWeekLow", 0),
+        }
+    except Exception:
+        return {}
+
+
 def get_usd_krw() -> float:
     cached = get_cache("usd_krw")
     if cached:
         return cached["rate"]
     try:
-        rate = float(yf.Ticker("KRW=X").fast_info["last_price"])
-        set_cache("usd_krw", {"rate": rate})
-        return rate
+        q = _yf_quote("USDKRW=X")
+        rate = float(q.get("price", 0) or 0)
+        if rate > 100:
+            set_cache("usd_krw", {"rate": rate})
+            return rate
     except Exception:
-        return 1350.0
+        pass
+    return 1350.0
 
 
 def fetch_us_stock(ticker: str) -> dict:
@@ -141,32 +183,30 @@ def fetch_us_stock(ticker: str) -> dict:
     clean = str(ticker).strip().upper()
     price_usd = change_amt_usd = change_rate = high52w_usd = 0.0
 
-    try:
-        info       = yf.Ticker(clean).fast_info
-        price_usd  = float(info.get("last_price", 0) or 0)
-        prev_close = float(info.get("previous_close", 0) or 0)
-        high52w_usd = float(info.get("year_high", 0) or 0)
-        if prev_close > 0:
+    q = _yf_quote(clean)
+    if q:
+        price_usd   = float(q.get("price", 0) or 0)
+        prev_close  = float(q.get("prev_close", 0) or 0)
+        high52w_usd = float(q.get("year_high", 0) or 0)
+        if prev_close > 0 and price_usd > 0:
             change_amt_usd = price_usd - prev_close
             change_rate    = (change_amt_usd / prev_close) * 100
-    except Exception:
-        pass
 
     rate      = get_usd_krw()
     price_krw = int(price_usd * rate)
 
     result = {
         "ticker": clean, "market": "US",
-        "price":     price_krw,
-        "price_usd": round(price_usd, 2),
+        "price":          price_krw,
+        "price_usd":      round(price_usd, 2),
         "change_amt":     round(change_amt_usd * rate),
         "change_amt_usd": round(change_amt_usd, 2),
         "change_rate":    round(change_rate, 2),
-        "high52w":     int(high52w_usd * rate),
-        "high52w_usd": round(high52w_usd, 2),
-        "currency": "USD",
-        "usd_krw":  rate,
-        "updated_at": datetime.now(timezone(timedelta(hours=9))).strftime("%H:%M:%S"),
+        "high52w":        int(high52w_usd * rate),
+        "high52w_usd":    round(high52w_usd, 2),
+        "currency":       "USD",
+        "usd_krw":        rate,
+        "updated_at":     datetime.now(timezone(timedelta(hours=9))).strftime("%H:%M:%S"),
     }
     set_cache(f"us_{ticker}", result)
     return result
