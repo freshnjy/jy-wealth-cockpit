@@ -993,6 +993,63 @@ function renderRebalance(){
       <td style="color:${qc};font-weight:700;font-family:var(--mono)">${qs}</td>
     </tr>`;
   }).join('')||emptyRow(8);
+
+  // 모바일 카드 렌더링
+  const oldCards = document.querySelector('#view-rebalance .mobile-cards');
+  if (oldCards) oldCards.remove();
+  if (isMobile()) renderRebalanceCards(h);
+}
+
+function renderRebalanceCards(h) {
+  const pane = document.getElementById('view-rebalance');
+  const wrap = document.createElement('div');
+  wrap.className = 'mobile-cards';
+
+  const total = portfolioData.accounts[currentAccount]?.total_value || 0;
+
+  h.forEach(r => {
+    const devColor = r.deviation > 0 ? 'var(--red)' : r.deviation < 0 ? 'var(--blue)' : 'var(--text2)';
+    const devIcon  = r.deviation > 0 ? '▲과비중' : r.deviation < 0 ? '▼저비중' : '적정';
+    const qsColor  = r.rebal_qty > 0 ? 'var(--red)' : r.rebal_qty < 0 ? 'var(--blue)' : 'var(--text2)';
+    const qsStr    = r.rebal_qty > 0 ? `+${r.rebal_qty}주 매수` : r.rebal_qty < 0 ? `${r.rebal_qty}주 매도` : 'HOLD';
+
+    const card = document.createElement('div');
+    card.className = 'm-card' + (r.is_action ? ' action-alert' : '');
+    card.innerHTML = `
+      <div class="m-card-header">
+        <div>
+          <div class="m-stock-name">${r.name}</div>
+          <div class="m-stock-code">${r.ticker}</div>
+        </div>
+        <div class="m-price-wrap">
+          <div class="m-price">${won(r.cur_price)}</div>
+          <div class="m-change" style="color:${devColor}">${devIcon} ${r.deviation >= 0 ? '+' : ''}${r.deviation.toFixed(1)}%</div>
+        </div>
+      </div>
+      <div class="m-grid">
+        <div class="m-grid-item">
+          <div class="m-grid-label">보유수량</div>
+          <div class="m-grid-value">${r.qty}주</div>
+        </div>
+        <div class="m-grid-item">
+          <div class="m-grid-label">현재비중</div>
+          <div class="m-grid-value">${r.cur_pct.toFixed(1)}%</div>
+        </div>
+        <div class="m-grid-item">
+          <div class="m-grid-label">목표비중</div>
+          <div class="m-grid-value" style="color:var(--accent)">${r.target_pct.toFixed(1)}%</div>
+        </div>
+      </div>
+      <div class="m-footer">
+        <div class="m-badges">
+          <span class="badge ${r.is_action ? 'badge-action' : 'badge-ok'}">${r.is_action ? '🚨 ACTION' : '✅ HOLD'}</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:${qsColor}">${qsStr}</div>
+      </div>`;
+    wrap.appendChild(card);
+  });
+
+  pane.appendChild(wrap);
 }
 
 function renderSidebar(){
