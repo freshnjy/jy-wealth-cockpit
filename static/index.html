@@ -1092,6 +1092,68 @@ function renderMDDAll(){
     });
   }
   document.getElementById('tbl-mdd-all').innerHTML=rows.join('')||emptyRow(7);
+
+  // 모바일 카드 렌더링
+  const oldMddCards = document.querySelector('#tab-mdd-view .mobile-cards');
+  if (oldMddCards) oldMddCards.remove();
+  if (isMobile()) renderMDDCards();
+}
+
+function renderMDDCards() {
+  const pane = document.querySelector('#tab-mdd-view .pane');
+  if (!pane) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'mobile-cards';
+
+  for (const [acctName, acct] of Object.entries(portfolioData.accounts)) {
+    acct.holdings.forEach(h => {
+      const mdd      = h.mdd;
+      const isAlert  = mdd <= -10;
+      const mddColor = mdd <= -30 ? 'var(--red)' : mdd <= -20 ? 'var(--yellow)' : mdd <= -10 ? 'var(--yellow)' : 'var(--green)';
+      const level    = mdd <= -30 ? '🔴 CRITICAL' : mdd <= -20 ? '🟠 DANGER' : mdd <= -10 ? '🟡 WARNING' : '🟢 NORMAL';
+      const cmmt     = mdd <= -30 ? '즉시 손절 검토' : mdd <= -20 ? '포지션 축소 고려' : mdd <= -10 ? '주의 모니터링' : h.high52w > 0 ? '정상 범위' : '52주 데이터 없음';
+      const isUS     = h.market === 'US';
+      const highStr  = isUS ? `$${h.high52w_usd || '—'}` : (h.high52w > 0 ? won(h.high52w) : '—');
+      const curStr   = isUS ? `$${h.cur_price_usd || '—'}` : won(h.cur_price);
+
+      const card = document.createElement('div');
+      card.className = 'm-card' + (isAlert ? ' action-alert' : '');
+      card.innerHTML = `
+        <div class="m-card-header">
+          <div>
+            <div class="m-stock-name">${h.name}</div>
+            <div class="m-stock-code">${h.ticker} · ${acctName}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:var(--mono);font-size:13px;color:var(--text)">${level}</div>
+            <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:${mddColor};margin-top:4px">
+              ${h.high52w > 0 ? (mdd >= 0 ? '+' : '') + mdd.toFixed(1) + '%' : '—'}
+            </div>
+          </div>
+        </div>
+        <div class="m-grid">
+          <div class="m-grid-item">
+            <div class="m-grid-label">현재가</div>
+            <div class="m-grid-value">${curStr}</div>
+          </div>
+          <div class="m-grid-item">
+            <div class="m-grid-label">52주 최고가</div>
+            <div class="m-grid-value">${highStr}</div>
+          </div>
+          <div class="m-grid-item">
+            <div class="m-grid-label">낙폭</div>
+            <div class="m-grid-value" style="color:${mddColor}">${h.high52w > 0 ? (mdd >= 0 ? '+' : '') + mdd.toFixed(1) + '%' : '—'}</div>
+          </div>
+        </div>
+        <div class="m-footer">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text2)">${cmmt}</div>
+        </div>`;
+      wrap.appendChild(card);
+    });
+  }
+
+  pane.appendChild(wrap);
 }
 
 function renderMDDStrip(id){
